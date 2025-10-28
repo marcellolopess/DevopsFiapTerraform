@@ -3,6 +3,8 @@
 # Fiap MBA SCJ
 
 terraform {
+  required_version = ">= 1.1.0"
+
   required_providers {
     aws = {
       source  = "hashicorp/aws"
@@ -13,23 +15,25 @@ terraform {
       version = "3.4.3"
     }
   }
-  required_version = ">= 1.1.0"
 
-  cloud {
-    organization = "DevopsFiap"
-
-    workspaces {
-      name = "gh-actions"
-    }
-  }
+  # Caso deseje usar Terraform Cloud, descomente e ajuste:
+  # cloud {
+  #   organization = "DevopsFiap"
+  #
+  #   workspaces {
+  #     name = "gh-actions"
+  #   }
+  # }
 }
 
 provider "aws" {
   region = "us-east-1"
 }
 
+# Gera um identificador aleatório para nomear recursos
 resource "random_pet" "sg" {}
 
+# Busca a AMI mais recente do Ubuntu 20.04
 data "aws_ami" "ubuntu" {
   most_recent = true
 
@@ -46,30 +50,18 @@ data "aws_ami" "ubuntu" {
   owners = ["099720109477"] # Canonical
 }
 
-resource "aws_instance" "web" {
-  ami                    = data.aws_ami.ubuntu.id
-  instance_type          = "t3.micro"
-  vpc_security_group_ids = [aws_security_group.web-sg.id]
-
-  user_data = <<-EOF
-              #!/bin/bash
-              apt-get update
-              apt-get install -y apache2
-              sed -i -e 's/80/8080/' /etc/apache2/ports.conf
-              echo "<style> body {background-color: blue;}</style><img src="https://postech.fiap.com.br/imgs/fiap-plus-alura/fiap_alura.png">" > /var/www/html/index.html
-              systemctl restart apache2
-              EOF
-}
-
-resource "aws_security_group" "web-sg" {
+# Cria o grupo de segurança
+resource "aws_security_group" "web_sg" {
   name = "${random_pet.sg.id}-sg"
+
   ingress {
     from_port   = 8080
     to_port     = 8080
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
-  // connectivity to ubuntu mirrors is required to run `apt-get update` and `apt-get install apache2`
+
+  # Necessário para o apt-get funcionar e acesso geral à internet
   egress {
     from_port   = 0
     to_port     = 0
@@ -78,28 +70,22 @@ resource "aws_security_group" "web-sg" {
   }
 }
 
-resource "aws_iam_user" "new_user" {
-  name = "User_Fiap" # Nome do novo usuário
+# Cria uma instância EC2 com Apache rodando na porta 8080
+resource "aws_instance" "web" {
+  ami                    = data.aws_ami.ubuntu.id
+  instance_type          = "t3.micro"
+  vpc_security_group_ids = [aws_security_group.web_sg.id]
+
+  user_data = <<-EOF
+    #!/bin/bash
+    apt-get update
+    apt-get install -y apache2
+    sed -i -e 's/80/8080/' /etc/apache2/ports.conf
+    echo '<style> body {background-color: blue;}</style><img src="https://postech.fiap.com.br/imgs/fiap-plus-alura/fiap_alura.png">' > /var/www/html/index.html
+    systemctl restart apache2
+  EOF
 
   tags = {
-    Name = "Example User"
+    Name = "fiap-web"
   }
-}
-
-resource "aws_iam_access_key" "new_user_access_key" {
-  user = aws_iam_user.new_user.name
-
-  # Garanta que as chaves de acesso sejam geradas apenas uma vez
-  lifecycle {
-    create_before_destroy = true
-  }
-}
-
-resource "aws_iam_user_policy_attachment" "new_user_policy_attachment" {
-  user       = aws_iam_user.new_user.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonS3FullAccess" # Política de exemplo (permissão de acesso total ao Amazon S3)
-}
-
-output "web-address" {
-  value = "${aws_instance.web.public_dns}:8080"
 }

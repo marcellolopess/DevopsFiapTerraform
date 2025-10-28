@@ -18,10 +18,10 @@ terraform {
   #cloud {
     #organization = "DevopsFiap"
 
-    workspaces {
-      name = "gh-actions"
-    }
-  }
+    #workspaces {
+      #name = "gh-actions"
+   # }
+ # }
 }
 
 provider "aws" {
